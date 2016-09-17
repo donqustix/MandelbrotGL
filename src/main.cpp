@@ -48,6 +48,20 @@ namespace
         operator GLuint() const noexcept {return index;}
     };
 
+    struct MandelbrotData
+    {
+        float scale;
+        float x;
+        float y;
+        unsigned max_iterations;
+    };
+
+    struct RenderData
+    {
+        GLuint shader_program;
+        GLuint vertex_array_object;
+    };
+
     GLobject create_rectangle_buffer()
     {
         GLobject buffer
@@ -177,6 +191,69 @@ namespace
 
         return {std::istreambuf_iterator<char>{stream}, std::istreambuf_iterator<char>{}};
     }
+
+    void do_events(MandelbrotData& mandelbrotData, bool& running) noexcept
+    {
+        static SDL_Event event;
+
+        while (::SDL_PollEvent(&event))
+        {
+            switch (event.type)
+            {
+                case SDL_KEYDOWN:
+                {
+                    const SDL_Scancode scancode = event.key.keysym.scancode;
+
+                    const float scale_per = 0.1F * mandelbrotData.scale;
+
+                    if      (scancode == SDL_SCANCODE_W)
+                        mandelbrotData.y += scale_per;
+                    else if (scancode == SDL_SCANCODE_S)
+                        mandelbrotData.y -= scale_per;
+
+                    if      (scancode == SDL_SCANCODE_A)
+                        mandelbrotData.x -= scale_per;
+                    else if (scancode == SDL_SCANCODE_D)
+                        mandelbrotData.x += scale_per;
+
+                    if      (scancode == SDL_SCANCODE_Z)
+                        mandelbrotData.scale -= scale_per;
+                    else if (scancode == SDL_SCANCODE_X)
+                        mandelbrotData.scale += scale_per;
+
+                    if      (scancode == SDL_SCANCODE_R)
+                        ++mandelbrotData.max_iterations;
+                    else if (scancode == SDL_SCANCODE_E)
+                        if (mandelbrotData.max_iterations > 0) --mandelbrotData.max_iterations;
+
+                    break;
+                }
+                case SDL_QUIT:
+                    running = false;
+                break;
+            }
+        }
+    }
+
+    void render(const MandelbrotData& mandelbrot_data, const RenderData& render_data) noexcept
+    {
+        ::glClear(GL_COLOR_BUFFER_BIT);
+
+        ::glUseProgram(render_data.shader_program);
+        ::glUniform1f(0, WINDOW_WIDTH);
+        ::glUniform1f(1, WINDOW_HEIGHT);
+        ::glUniform2f(2, -2.0F * mandelbrot_data.scale + mandelbrot_data.x,
+                          1.0F * mandelbrot_data.scale + mandelbrot_data.x);
+        ::glUniform2f(3, -1.0F * mandelbrot_data.scale + mandelbrot_data.y,
+                          1.0F * mandelbrot_data.scale + mandelbrot_data.y);
+        ::glUniform1ui(4, mandelbrot_data.max_iterations);
+
+        ::glBindVertexArray(render_data.vertex_array_object);
+        ::glDrawArrays(GL_TRIANGLES, 0, 6);
+        ::glBindVertexArray(0);
+
+        ::glUseProgram(0);
+    }
 }
 
 int main()
@@ -207,64 +284,14 @@ int main()
                     const GLobject shader_program{::create_shader_program(::read_file("res/mandelbrot_shader.vs"),
                                                                           ::read_file("res/mandelbrot_shader.fs"))};
 
-                    unsigned max_iterations = 30;
-                    float scale = 1.0F;
-                    float x = 0.0F, y = 0.0F;
-
-                    SDL_Event event;
+                    MandelbrotData mandelbrot_data{1.0F, 0.0F, 0.0F, 30};
+                    const RenderData render_data{shader_program, rectangle_vertex_array_object};
 
                     bool running = true;
                     while (running)
                     {
-                        while (::SDL_PollEvent(&event))
-                        {
-                            switch (event.type)
-                            {
-                                case SDL_KEYDOWN:
-                                {
-                                    const SDL_Scancode scancode = event.key.keysym.scancode;
-
-                                    const float move_delta = 0.1F / scale;
-
-                                    if (scancode == SDL_SCANCODE_W)
-                                        y += move_delta;
-                                    else if (scancode == SDL_SCANCODE_S)
-                                        y -= move_delta;
-                                    if (scancode == SDL_SCANCODE_A)
-                                        x -= move_delta;
-                                    else if (scancode == SDL_SCANCODE_D)
-                                        x += move_delta;
-                                    if (scancode == SDL_SCANCODE_Z)
-                                        scale += 0.1F * scale;
-                                    else if (scancode == SDL_SCANCODE_X)
-                                        scale -= 0.1F * scale;
-                                    if (scancode == SDL_SCANCODE_R)
-                                        ++max_iterations;
-                                    else if (scancode == SDL_SCANCODE_E)
-                                        if (max_iterations > 0) --max_iterations;
-
-                                    break;
-                                }
-                                case SDL_QUIT:
-                                    running = false;
-                                    break;
-                            }
-                        }
-
-                        ::glUseProgram(shader_program);
-                        ::glUniform1f(0, WINDOW_WIDTH);
-                        ::glUniform1f(1, WINDOW_HEIGHT);
-                        ::glUniform2f(2, -2.0F / scale + x, 1.0F / scale + x);
-                        ::glUniform2f(3, -1.0F / scale + y, 1.0F / scale + y);
-                        ::glUniform1ui(4, max_iterations);
-
-                        ::glClear(GL_COLOR_BUFFER_BIT);
-
-                        ::glBindVertexArray(rectangle_vertex_array_object);
-                        ::glDrawArrays(GL_TRIANGLES, 0, 6);
-                        ::glBindVertexArray(0);
-
-                        ::glUseProgram(0);
+                        ::do_events(mandelbrot_data, running);
+                        ::render(mandelbrot_data, render_data);
 
                         ::SDL_GL_SwapWindow(window);
                         ::SDL_Delay(30);
