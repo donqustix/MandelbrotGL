@@ -185,7 +185,7 @@ namespace
 
     std::string read_file(const std::string& file_path)
     {
-        std::ifstream stream{file_path, std::ios::in | std::ios::binary};
+        std::ifstream stream{file_path, std::ios::in};
         if (!stream)
             throw std::runtime_error{"file reading error"};
 
